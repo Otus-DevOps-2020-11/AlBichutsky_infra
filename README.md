@@ -82,12 +82,25 @@ testapp_port=9292
 [2]: install_mongodb.sh        "install_mongodb.sh"
 [3]: deploy.sh                 "deploy.sh"
 
+Для создания инстанса используется команда:
+
+```bash
+yc compute instance create \
+  --name reddit-app \
+  --hostname reddit-app \
+  --memory=4 \
+  --create-boot-disk image-folder-id=standard-images,image-family=ubuntu-1604-lts,size=10GB \
+  --network-interface subnet-name=default-ru-central1-a,nat-ip-version=ipv4 \
+  --metadata serial-port-enable=1 \
+  --ssh-key ~/.ssh/appuser.pub
+```
+
 ### Дополнительное задание
 
 В  качестве  доп.  задания  используйте  созданные  ранее  скрипты для создания `startup-script`, который будет запускаться при создании инстанса. В  результате  применения  данной  команды  CLI мы  должны  получать инстанс  с  уже  запущенным  приложением.  Startup-скрипт  необходимо закомитить, а используемую команду CLI добавить в описание репозитория (README.md).
 
 Приложен файл [metadata.yaml](metadata.yaml) (startup-сценарий `init-cloud`), используемый для provision хоста после его создания.  
-Команда CLI для запуска из каталога проекта:
+Для создания инстанса и деплоя приложения используется команда:  
 
 ```bash
 yc compute instance create \
@@ -100,7 +113,7 @@ yc compute instance create \
 --metadata-from-file user-data=./metadata.yaml
 ```
 
-Подключение к хосту выполняется командой:
+Подключение к хосту выполняем командой:  
 
 ```bash
 ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
