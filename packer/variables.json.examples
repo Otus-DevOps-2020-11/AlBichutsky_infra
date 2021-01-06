@@ -1,0 +1,6 @@
+{
+  "service_account_key_file": "/opt/keys/yc/key.json",
+  "folder_id": "d1ghee2bb8frm0d32dfdf",
+  "source_image_family": "ubuntu-1604-lts"
+}
+

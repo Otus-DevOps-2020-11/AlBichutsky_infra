@@ -1,0 +1,36 @@
+{
+     "variables": {
+            "token": "{{env `YC_TOKEN`}}",
+            "zone": "ru-central1-a",
+            "instance_cores": "4"
+        },
+     "builders": [
+        {
+            "type": "yandex",
+            "token": "{{user `token`}}",
+            "service_account_key_file": "{{user `service_account_key_file`}}",
+            "folder_id": "{{user `folder_id`}}",
+            "source_image_family": "{{user `source_image_family`}}",
+            "image_name": "reddit-base-{{timestamp}}",
+            "image_family": "reddit-base",
+            "ssh_username": "ubuntu",
+            "platform_id": "standard-v1",
+            "zone": "{{user `zone`}}",
+            "instance_cores": "{{user `instance_cores`}}",
+	    "use_ipv4_nat" : "true"
+        }
+    ],
+    "provisioners": [
+        {
+            "type": "shell",
+            "script": "scripts/install_ruby.sh",
+            "execute_command": "sudo {{.Path}}"
+        },
+        {
+            "type": "shell",
+            "script": "scripts/install_mongodb.sh",
+            "execute_command": "sudo {{.Path}}"
+        }
+    ]
+}
+
