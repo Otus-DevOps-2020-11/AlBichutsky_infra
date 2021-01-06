@@ -118,3 +118,118 @@ yc compute instance create \
 ```bash
 ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
 ```
+
+## Домашнее задание №5  
+
+В ДЗ выполняется:
+
+- Создание базового образа ВМ при помощи Packer в Yandex Cloud.
+- Деплой приложения в Compute Engine при помощи ранее подготовленного образа.  
+- Параметризация шаблона Packer.  
+- Создание скрипта `create-reddit-vm.sh` в директории `config-scripts`, который создает ВМ из созданного базового образа с помощью Yandex Cloud CLI (по желанию).
+
+### Основное задание
+
+Приложены файлы:
+
+- шаблон Packer [ubuntu16.json](packer/ubuntu16.json):
+
+```json
+{
+     "variables": {
+            "token": "{{env `YC_TOKEN`}}",
+            "zone": "ru-central1-a",
+            "instance_cores": "4"
+        },
+     "builders": [
+        {
+            "type": "yandex",
+            "token": "{{user `token`}}",
+            "service_account_key_file": "{{user `service_account_key_file`}}",
+            "folder_id": "{{user `folder_id`}}",
+            "source_image_family": "{{user `source_image_family`}}",
+            "image_name": "reddit-base-{{timestamp}}",
+            "image_family": "reddit-base",
+            "ssh_username": "ubuntu",
+            "platform_id": "standard-v1",
+            "zone": "{{user `zone`}}",
+            "instance_cores": "{{user `instance_cores`}}",
+            "use_ipv4_nat" : "true"
+        }
+    ],
+    "provisioners": [
+        {
+            "type": "shell",
+            "script": "scripts/install_ruby.sh",
+            "execute_command": "sudo {{.Path}}"
+        },
+        {
+            "type": "shell",
+            "script": "scripts/install_mongodb.sh",
+            "execute_command": "sudo {{.Path}}"
+        }
+    ]
+}
+```
+
+В рамках задания в данный шаблон добавлены дополнительные опции билдера (через переменные):
+
+```json
+{
+     "variables": {
+            "token": "{{env `YC_TOKEN`}}",
+            "zone": "ru-central1-a",
+            "instance_cores": "4"
+        },
+         "builders": [
+        {
+            ...
+            "token": "{{user `token`}}",
+            ...
+            "zone": "{{user `zone`}}",
+            "instance_cores": "{{user `instance_cores`}}",
+        }
+    ],
+    ...
+```
+
+- пример отдельного файла с переменными [variables.json.examples](packer/variables.json.examples), в котором могут храниться секреты и не должен отслеживаться в git (файл с реальными данными `variables.json` добавлен в .gitignore)
+
+```json
+{
+  "service_account_key_file": "/opt/keys/yc/key.json",
+  "folder_id": "d1ghee2bb8frm0d32dfdf",
+  "source_image_family": "ubuntu-1604-lts"
+}
+```
+
+Команды для проверки шаблона и билда образа (запуск из каталога `./packer`):
+
+```bash
+packer validate -var-file=variables.json ubuntu16.json 
+packer build -var-file=variables.json ubuntu16.json
+```
+
+### Дополнительное задание
+
+Приложен скрипт [create-reddit-vm.sh](/config-scripts/create-reddit-vm.sh), который создает ВМ в Yandex Cloud из базового образа, собранного в Packer:
+
+```bash
+#!/bin/bash
+
+# имя инстанса
+instance_name=$(date +%d-%m-%Y_%H-%M-%S)
+
+# находим id образа, созданного в packer (по имени)
+image_id=$(yc compute image list | grep "reddit-base-1609948540" | awk '{print $2}')
+
+# создаем инстанс
+yc compute instance create \
+  --name $instance_name \
+  --hostname reddit-app \
+  --memory=2 \
+  --zone ru-central1-a \
+  --network-interface subnet-name=default-ru-central1-a,nat-ip-version=ipv4 \
+  --create-boot-disk name=disk1,size=10GB,image-id=$image_id \
+  --ssh-key ~/.ssh/appuser.pub
+```
