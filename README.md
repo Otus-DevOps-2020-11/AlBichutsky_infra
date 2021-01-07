@@ -125,7 +125,7 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
 
 - Создание базового образа ВМ при помощи Packer в Yandex Cloud.
 - Деплой приложения в Compute Engine при помощи ранее подготовленного образа.  
-- Параметризация шаблона Packer.  
+- Параметризация шаблона Packer (с переопределением значений с помощью var-файла и переменных в шаблоне).  
 - Создание скрипта `create-reddit-vm.sh` в директории `config-scripts`, который создает ВМ из созданного базового образа с помощью Yandex Cloud CLI (по желанию).
 
 ### Основное задание
@@ -172,16 +172,11 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
 }
 ```
 
-В рамках задания в данный шаблон добавлены дополнительные опции билдера (через переменные):
+В рамках задания в данный шаблон добавлены дополнительные опции билдера (их значения указаны в секции `variables` шаблона):
 
 ```json
-{
-     "variables": {
-            "token": "{{env `YC_TOKEN`}}",
-            "zone": "ru-central1-a",
-            "instance_cores": "4"
-        },
-         "builders": [
+    ...
+     "builders": [
         {
             ...
             "token": "{{user `token`}}",
@@ -193,7 +188,8 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
     ...
 ```
 
-- пример отдельного файла с переменными [variables.json.examples](packer/variables.json.examples), в котором могут храниться секреты и не должен отслеживаться в git (файл с реальными данными `variables.json` добавлен в .gitignore)
+- Пример var-файла с переменными [variables.json.examples](packer/variables.json.examples), который может использоваться с шаблоном.  
+В нем могут храниться секреты (не должен отслеживаться в git). Файл с реальными параметрами `variables.json` добавлен в .gitignore.
 
 ```json
 {
@@ -203,7 +199,7 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
 }
 ```
 
-Команды для проверки шаблона и билда образа (запуск из каталога `./packer`):
+Команда для валидации и билда образа с использованием var-файла (запуск из каталога `./packer`):
 
 ```bash
 packer validate -var-file=variables.json ubuntu16.json 
@@ -217,8 +213,7 @@ packer build -var-file=variables.json ubuntu16.json
 ```bash
 #!/bin/bash
 
-# имя инстанса
-instance_name=$(date +%d-%m-%Y_%H-%M-%S)
+instance_name="redditapp-$(date +%d%m%Y-%H%M%S)"
 
 # находим id образа, созданного в packer (по имени)
 image_id=$(yc compute image list | grep "reddit-base-1609948540" | awk '{print $2}')
@@ -226,10 +221,17 @@ image_id=$(yc compute image list | grep "reddit-base-1609948540" | awk '{print $
 # создаем инстанс
 yc compute instance create \
   --name $instance_name \
-  --hostname reddit-app \
+  --hostname $instance_name \
   --memory=2 \
   --zone ru-central1-a \
   --network-interface subnet-name=default-ru-central1-a,nat-ip-version=ipv4 \
-  --create-boot-disk name=disk1,size=10GB,image-id=$image_id \
+  --create-boot-disk name=$instance_name,size=10GB,image-id=$image_id \
   --ssh-key ~/.ssh/appuser.pub
+
+```
+
+После создания ВМ, подключаемся к инстансу через ssh:
+
+```bash
+ssh -i ~/.ssh/appuser yc-user@<публичный IP-адрес>
 ```
