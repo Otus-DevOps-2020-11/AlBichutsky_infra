@@ -123,9 +123,9 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
 
 В ДЗ выполняется:
 
-- Создание базового образа ВМ при помощи Packer в Yandex Cloud (в образ включены mongodb, ruby - устанавлены через shell-provisioner packer).
-- Деплой приложения в Compute Engine при помощи ранее подготовленного образа.  
-- Параметризация шаблона Packer (с использованием var-файла и переменных в шаблоне).  
+- Создание базового образа ВМ при помощи Packer в Yandex Cloud (в образ включены mongodb, ruby - устанавлены через bash-скрипты с помощью shell-provisioner packer).
+- Деплой тестового приложения в Compute Engine при помощи ранее подготовленного образа.  
+- Параметризация шаблона Packer (с использованием var-файла и переменных в самом шаблоне).  
 - Создание скрипта `create-reddit-vm.sh` в директории `config-scripts`, который создает ВМ из созданного базового образа с помощью Yandex Cloud CLI (по желанию).
 
 ### Основное задание
@@ -186,8 +186,7 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
     ...
 ```
 
-- Пример var-файла с переменными [variables.json.examples](packer/variables.json.examples), который может использоваться вместе с шаблоном Packer.  
-В нем могут храниться секреты (не должен отслеживаться в git). Реальный файл с локальной машины `variables.json` добавлен в .gitignore.
+- Пример var-файла с переменными [variables.json.examples](packer/variables.json.examples), который может использоваться вместе с шаблоном Packer. В нем могут храниться секреты (не должен отслеживаться в git). Реальный файл на локальной машине `variables.json` добавлен в .gitignore.
 
 ```json
 {
@@ -197,12 +196,31 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
 }
 ```
 
-Команда для валидации и билда образа с использованием var-файла (запускаем из каталога `./packer`):
+Команда для валидации шаблона с указанием var-файла (запускаем из каталога `./packer`):
 
 ```bash
 packer validate -var-file=variables.json ubuntu16.json 
+```
+
+Команда для билда образа с указанием var-файла (запускаем из каталога `./packer`):
+
+```bash
 packer build -var-file=variables.json ubuntu16.json
 ```
+
+После сборки образа создаем ВМ, выбрав его (в качестве пользовательсвого образа) в Yandex Cloud.  
+Затем подключаемся к ВМ и деплоим приложение командами:
+
+```bash
+cd /home
+sudo apt-get update
+sudo apt-get install -y git
+git clone -b monolith https://github.com/express42/reddit.git
+cd reddit && bundle install
+puma -d
+```
+
+Проверку запуска приложения можно выполнить перейдя по адресу: http://<публичный IP ВМ>:9292
 
 ### Дополнительное задание
 
