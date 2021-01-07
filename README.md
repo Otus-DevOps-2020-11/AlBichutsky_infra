@@ -123,9 +123,9 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
 
 В ДЗ выполняется:
 
-- Создание базового образа ВМ при помощи Packer в Yandex Cloud.
+- Создание базового образа ВМ при помощи Packer в Yandex Cloud (в образ включены mongodb, ruby - устанавлены через shell-provisioner packer).
 - Деплой приложения в Compute Engine при помощи ранее подготовленного образа.  
-- Параметризация шаблона Packer (с переопределением значений с помощью var-файла и переменных в шаблоне).  
+- Параметризация шаблона Packer (с использованием var-файла и переменных в шаблоне).  
 - Создание скрипта `create-reddit-vm.sh` в директории `config-scripts`, который создает ВМ из созданного базового образа с помощью Yandex Cloud CLI (по желанию).
 
 ### Основное задание
@@ -177,10 +177,8 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
 ```json
     ...
      "builders": [
-        {
-            ...
+        { 
             "token": "{{user `token`}}",
-            ...
             "zone": "{{user `zone`}}",
             "instance_cores": "{{user `instance_cores`}}",
         }
@@ -188,8 +186,8 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
     ...
 ```
 
-- Пример var-файла с переменными [variables.json.examples](packer/variables.json.examples), который может использоваться с шаблоном.  
-В нем могут храниться секреты (не должен отслеживаться в git). Файл с реальными параметрами `variables.json` добавлен в .gitignore.
+- Пример var-файла с переменными [variables.json.examples](packer/variables.json.examples), который может использоваться вместе с шаблоном Packer.  
+В нем могут храниться секреты (не должен отслеживаться в git). Реальный файл с локальной машины `variables.json` добавлен в .gitignore.
 
 ```json
 {
@@ -199,7 +197,7 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
 }
 ```
 
-Команда для валидации и билда образа с использованием var-файла (запуск из каталога `./packer`):
+Команда для валидации и билда образа с использованием var-файла (запускаем из каталога `./packer`):
 
 ```bash
 packer validate -var-file=variables.json ubuntu16.json 
