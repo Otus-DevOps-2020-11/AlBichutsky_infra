@@ -137,14 +137,12 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
 ```json
 {
      "variables": {
-            "token": "{{env `YC_TOKEN`}}",
             "zone": "ru-central1-a",
             "instance_cores": "4"
         },
      "builders": [
         {
             "type": "yandex",
-            "token": "{{user `token`}}",
             "service_account_key_file": "{{user `service_account_key_file`}}",
             "folder_id": "{{user `folder_id`}}",
             "source_image_family": "{{user `source_image_family`}}",
@@ -178,7 +176,6 @@ ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
     ...
      "builders": [
         { 
-            "token": "{{user `token`}}",
             "zone": "{{user `zone`}}",
             "instance_cores": "{{user `instance_cores`}}",
         }
