@@ -118,3 +118,133 @@ yc compute instance create \
 ```bash
 ssh -i ~/.ssh/appuser yc-user@<ip-адрес хоста>
 ```
+
+## Домашнее задание №5  
+
+В ДЗ выполняется:
+
+- Создание базового образа ВМ при помощи Packer в Yandex Cloud (в образ включены mongodb, ruby - установлены через bash-скрипты с помощью shell-provisioner packer).
+- Деплой тестового приложения при помощи ранее подготовленного образа.  
+- Параметризация шаблона Packer (с использованием var-файла и переменных в самом шаблоне).  
+- Создание скрипта `create-reddit-vm.sh` в директории `config-scripts`, который создает ВМ из созданного базового образа с помощью Yandex Cloud CLI (по желанию).
+
+### Основное задание
+
+Приложены файлы:
+
+- шаблон Packer [ubuntu16.json](packer/ubuntu16.json):
+
+```json
+{
+     "variables": {
+            "zone": "ru-central1-a",
+            "instance_cores": "4"
+        },
+     "builders": [
+        {
+            "type": "yandex",
+            "service_account_key_file": "{{user `service_account_key_file`}}",
+            "folder_id": "{{user `folder_id`}}",
+            "source_image_family": "{{user `source_image_family`}}",
+            "image_name": "reddit-base-{{timestamp}}",
+            "image_family": "reddit-base",
+            "ssh_username": "ubuntu",
+            "platform_id": "standard-v1",
+            "zone": "{{user `zone`}}",
+            "instance_cores": "{{user `instance_cores`}}",
+            "use_ipv4_nat" : "true"
+        }
+    ],
+    "provisioners": [
+        {
+            "type": "shell",
+            "script": "scripts/install_ruby.sh",
+            "execute_command": "sudo {{.Path}}"
+        },
+        {
+            "type": "shell",
+            "script": "scripts/install_mongodb.sh",
+            "execute_command": "sudo {{.Path}}"
+        }
+    ]
+}
+```
+
+В рамках задания в данный шаблон добавлены дополнительные опции билдера (их значения указаны в секции `variables` шаблона):
+
+```json
+    ...
+     "builders": [
+        { 
+            "zone": "{{user `zone`}}",
+            "instance_cores": "{{user `instance_cores`}}",
+        }
+    ],
+    ...
+```
+
+- Пример var-файла с переменными [variables.json.examples](packer/variables.json.examples), который может использоваться вместе с шаблоном Packer. В нем могут храниться секреты (не должен отслеживаться в git). Реальный файл на локальной машине `variables.json` добавлен в .gitignore.
+
+```json
+{
+  "service_account_key_file": "/opt/keys/yc/key.json",
+  "folder_id": "d1ghee2bb8frm0d32dfdf",
+  "source_image_family": "ubuntu-1604-lts"
+}
+```
+
+Команда для валидации шаблона с указанием var-файла (запускаем из каталога `./packer`):
+
+```bash
+packer validate -var-file=variables.json ubuntu16.json 
+```
+
+Команда для билда образа с указанием var-файла (запускаем из каталога `./packer`):
+
+```bash
+packer build -var-file=variables.json ubuntu16.json
+```
+
+После сборки образа создаем ВМ, выбрав его (в качестве пользовательсвого образа) в Yandex Cloud.  
+Затем подключаемся к ВМ и деплоим приложение командами:
+
+```bash
+cd /home
+sudo apt-get update
+sudo apt-get install -y git
+git clone -b monolith https://github.com/express42/reddit.git
+cd reddit && bundle install
+puma -d
+```
+
+Проверку запуска приложения можно выполнить, перейдя по адресу: http://<публичный IP ВМ>:9292
+
+### Дополнительное задание
+
+Приложен скрипт [create-reddit-vm.sh](/config-scripts/create-reddit-vm.sh), который запускается на локальной машине и создает ВМ в Yandex Cloud из базового образа, хранящегося в облаке (собранного ранее в Packer):
+
+```bash
+#!/bin/bash
+
+instance_name="redditapp-$(date +%d%m%Y-%H%M%S)"
+
+# находим id образа, созданного в packer (по имени)
+image_id=$(yc compute image list | grep "reddit-base-1609948540" | awk '{print $2}')
+
+# создаем инстанс
+yc compute instance create \
+  --name $instance_name \
+  --hostname $instance_name \
+  --memory=2 \
+  --zone ru-central1-a \
+  --network-interface subnet-name=default-ru-central1-a,nat-ip-version=ipv4 \
+  --create-boot-disk name=$instance_name,size=10GB,image-id=$image_id \
+  --ssh-key ~/.ssh/appuser.pub
+
+```
+
+После создания ВМ, подключаемся к инстансу через ssh:
+
+```bash
+ssh -i ~/.ssh/appuser yc-user@<публичный IP-адрес>
+```
