@@ -274,3 +274,249 @@ systemctl status | stop | start puma
 ```
 
 Приложение должно быть доступно по адресу: http://<публичный IP-адрес ВМ>:9292  
+
+## Домашнее задание №7
+
+В ДЗ выполняется: 
+- Cоздание сетевых ресурсов - `yandex_vpc_network`, `yandex_vpc_subnet` и инстанса - `yandex_compute_instance`, определенных в файле `main.tf`. Для того, чтобы сетевые ресурсы с IP-адресами создались до инстанса, используется неявная зависимость:
+
+```
+provider "yandex" {
+  service_account_key_file = var.service_account_key_file
+  cloud_id                 = var.cloud_id
+  folder_id                = var.folder_id
+  zone                     = var.zone
+}
+
+# Создание сетевых ресурсов
+
+resource "yandex_vpc_network" "app-network" {
+  name = "reddit-app-network"
+}
+
+resource "yandex_vpc_subnet" "app-subnet" {
+  name           = "reddit-app-subnet"
+  zone           = "ru-central1-a"
+  network_id     = "${yandex_vpc_network.app-network.id}"
+  v4_cidr_blocks = ["192.168.10.0/24"]
+}
+
+# Создание инстанса
+
+resource "yandex_compute_instance" "app" {
+  name = "reddit-app"
+  zone = var.zone
+
+  resources {
+    cores  = 2
+    memory = 2
+  }
+
+  boot_disk {
+    initialize_params {
+      # Указать id образа созданного в предыдущем домашем задании
+      image_id = var.image_id
+    }
+  }
+
+  network_interface {
+    # ссылаемся на сетевой ресурс, описанный выше, чтобы инстанс был создан после подсети и IP
+    subnet_id = yandex_vpc_subnet.app-subnet.id
+    nat = true
+  }
+
+  metadata = {
+    ssh-keys = "ubuntu:${file(var.public_key_path)}"
+  }
+}
+
+```
+- В каталоге `packer` созданы 2 новых шаблона:   
+`db.json` для сборки образа `reddit-db-base` (содержит mongodb).   
+`app.json` для сборки образа `reddit-app-base` (содержит ruby).    
+
+Выполнена сборка образов `packer` в YC на базе `ubuntu 16.04`.
+
+Конфигурация ресурсов `terraform` была разделена на несколько файлов:
+`main.tf`
+
+```
+provider "yandex" {
+  service_account_key_file = var.service_account_key_file
+  cloud_id  = var.cloud_id
+  folder_id = var.folder_id
+  zone      = var.zone
+}
+```
+`app.tf` - создается инстанс из образа `reddit-app-base`
+
+```
+resource "yandex_compute_instance" "app" {
+  name = "reddit-app"
+
+  labels = {
+    tags = "reddit-app"
+  }
+  resources {
+    cores  = 1
+    memory = 2
+  }
+
+  boot_disk {
+    initialize_params {
+      image_id = var.app_disk_image
+    }
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.app-subnet.id
+    nat = true
+  }
+
+  metadata = {
+  ssh-keys = "ubuntu:${file(var.public_key_path)}"
+  }
+}
+```
+`db.tf`  - создается инстанс из образа `reddit-db-base`
+
+```
+resource "yandex_compute_instance" "db" {
+  name = "reddit-db"
+  labels = {
+    tags = "reddit-db"
+  }
+
+  resources {
+    cores  = 1
+    memory = 2
+  }
+
+  boot_disk {
+    initialize_params {
+      image_id = var.db_disk_image
+    }
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.app-subnet.id
+    nat = true
+  }
+
+  metadata = {
+  ssh-keys = "ubuntu:${file(var.public_key_path)}"
+  }
+}
+```
+
+`vpc.tf` - создается сетевой ресурс.
+```
+resource "yandex_vpc_network" "app-network" {
+  name = "app-network"
+}
+
+resource "yandex_vpc_subnet" "app-subnet" {
+  name           = "app-subnet"
+  zone           = "ru-central1-a"
+  network_id     = "${yandex_vpc_network.app-network.id}"
+  v4_cidr_blocks = ["192.168.10.0/24"]
+}
+```
+В `outputs.tf` добавлены nat адреса инстансов
+
+```
+output "external_ip_address_app" {
+  value = yandex_compute_instance.app.network_interface.0.nat_ip_address
+}
+output "external_ip_address_db" {
+  value = yandex_compute_instance.db.network_interface.0.nat_ip_address
+}
+```
+
+После запуска инфраструктуры в следующем задании `db.tf`, `app.tf`, `vpc.tf` были удалены.
+
+- созданы модули в каталоге `modules` (их конфиги лежат в каталогах `app`, `db`)
+
+- Файл `main.tf`, в котором вызываются модули, а также переменные лежат в каталогах для разных окружений - `stage` и `prod`
+
+Для загрузки модулей необходимо перейти в `stage` и `prod` и выполнить комманду:
+
+```bash 
+# инциализация terraform в новом каталоге
+terraform init
+# загрузка модулей (если были изменения)
+terraform get
+```
+Модули загружаются в каталог `.terraform`
+
+`main.tf`:
+
+```
+provider "yandex" {
+  service_account_key_file = var.service_account_key_file
+  cloud_id                 = var.cloud_id
+  folder_id                = var.folder_id
+  zone                     = var.zone
+}
+
+# Создаем VPC-ресурсы для ВМ: сеть "app-network" и подсеть "app-subnet"
+
+# resource "yandex_vpc_network" "app-network" {
+# name = "app-network"
+# }
+
+# resource "yandex_vpc_subnet" "app-subnet" {
+#  name           = "app-subnet"
+#  zone           = "ru-central1-a"
+#  network_id     = "${yandex_vpc_network.app-network.id}"
+#  v4_cidr_blocks = ["192.168.10.0/24"]
+# }
+
+module "app" {
+  source          = "../modules/app"
+  public_key_path = var.public_key_path
+  app_disk_image  = var.app_disk_image
+  # сейчас подсеть уже создана в YC и определена в terraform.tfvars
+  subnet_id       = var.subnet_id
+  # если ВМ создается в подсети "app-subnet" после запуска terraform, то
+  # - закомментируем параметр выше
+  # - закомментируем параметр subnet_id в terraform.tfvars 
+  # - расскоментируем ниже
+  # subnet_id       = yandex_vpc_subnet.app-subnet.id
+}
+
+module "db" {
+  source          = "../modules/db"
+  public_key_path = var.public_key_path
+  db_disk_image   = var.db_disk_image
+    # сейчас подсеть уже создана в YC и определена в terraform.tfvars
+  subnet_id       = var.subnet_id
+  # если ВМ создается в подсети "app-subnet" после запуска terraform, то
+  # - закомментируем параметр выше
+  # - закомментируем параметр subnet_id в terraform.tfvars 
+  # - расскоментируем ниже
+  # subnet_id       = yandex_vpc_subnet.app-subnet.id
+}
+
+```
+- параметризирована конфигурация модулей с помощью `count` и `for_each` для задания имени инстансов и добавлен параметр `core_fraction`.
+
+- конфигурационный файлы отредактированы коммандой  
+
+```bash
+terraform fmt
+```
+
+### Проверка
+
+Для проверки переходим в каталог `stage` или `prod` и выполняем команду:
+
+```bash
+terraform plan
+terraform apply
+```
+Затем подключаемся к созданным инстансам:
+
+```bash
+ssh -i ~/.ssh/appuser ubuntu@<публичный ip-адрес>
+```
