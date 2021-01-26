@@ -25,4 +25,9 @@ variable subnet_id {
 variable service_account_key_file {
   description = "key.json"
 }
-
+variable app_disk_image {
+  description = "Disk image for reddit app"
+}
+variable db_disk_image {
+  description = "Disk image for reddit db"
+}

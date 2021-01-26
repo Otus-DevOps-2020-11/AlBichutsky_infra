@@ -1,9 +1,0 @@
-cloud_id                 = "b1g45tm3pnfbg08prel5"
-folder_id                = "b1fbm2bv6frm6ddhltjg"
-public_key_path          = "~/.ssh/yc.pub"
-private_key_path         = "~/.ssh/yc" # указываем приватный ключ для подключения провижионеров
-image_id                 = "fd8n3v0a34dfd3fwsedd"
-subnet_id                = "efbq5ed43455d4cd45rg"
-service_account_key_file = "~/key.json"
-# zone = "ru-central1-a"   # значение по умолчанию уже определено в файле variables.tf
-
