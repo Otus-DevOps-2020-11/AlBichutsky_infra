@@ -533,7 +533,8 @@ cd terraform/stage
 terraform plan
 terraform apply
 ```
-- Создал конфигурационный файл `ansible.cfg` с необходимыми параметрами
+
+- Создал конфигурационный файл `ansible.cfg` с необходимыми параметрами:
 
 ```
 [defaults]
@@ -611,7 +612,7 @@ ansible app -become=yes -m git -a 'repo=https://github.com/express42/reddit.git 
 ansible app -m command -a 'git clone https://github.com/express42/reddit.git /home/appuser/reddit' # должна появиться ошибка при выполнении
 ```
 
-- Создал и выполнил playbook
+- Создал и выполнил playbook:
 
 ```yml
 ---
@@ -629,7 +630,7 @@ ansible app -m command -a 'git clone https://github.com/express42/reddit.git /ho
         dest: /home/appuser/reddit
 ```
 
-Команда для запуска сценария `playbook`
+Команда для запуска сценария `playbook`:
 
 ```bash
 ansible-playbook clone.yml
@@ -656,7 +657,7 @@ appserver                  : ok=3    changed=1    unreachable=0    failed=0    s
 
 ### Задание со *
 
-Приложен bash-скрипт `dynamic_inv.sh` - во время выполнения формирует динамически список хостов для Ansible. IP-адреса инстансов в скрипте определяются в соответствии с их названиями в YaCloud, заданными ранее через `terraform`: reddit-app-0, reddit-db-dev1.
+Приложен bash-скрипт `dynamic_inv.sh` - во время выполнения формирует динамически список хостов для Ansible (динамический инвентори). IP-адреса определяются в соответствии с названиями инстансов в YaCloud, созданными ранее через `terraform`: reddit-app-0, reddit-db-dev1.
 
 ```bash
 #! /bin/bash
@@ -697,13 +698,13 @@ else
 fi
 ```
 
-** Опции скрипта ** 
+**Опции скрипта** 
 
 `--list` - Возвращает список групп, хостов, а также переменных в формате JSON.
 
 `--host` - Поддержка этой опции необязательна и не используется (указана пустая секция `_meta`). Cкрипт возвращает элемент верхнего уровня с именем `_meta`, в котором могут быть перечислены все переменные для хостов.
 
-Пример выполнения:
+Пример использования скрипта:
 
 ```bash
 [root@localhost ansible]# ./dynamic_inv.sh --list
@@ -729,8 +730,8 @@ fi
     }
 }
 ```
-Файл динамического инвентори `inventory.json` приложил к ДЗ (формально он не используется).  
-Генерация выполняется командой: 
+Файл динамического инвентори `inventory.json` приложил к ДЗ (формально он не используется, используется скрипт).  
+Его создание выполнил командой: 
 
 ```bash
 ./dynamic_inv.sh --list > inventory.json
