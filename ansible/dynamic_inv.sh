@@ -21,7 +21,7 @@ cat<< EOF
       "$dbserver" 
    ],
    "vars": {
-      "example_var": "values"
+      "example_var": "value"
    }
   },
   "_meta": {

@@ -523,9 +523,9 @@ ssh -i ~/.ssh/appuser ubuntu@<публичный ip-адрес>
 
 ## Домашнее задание №8
 
-1-е задание:
+### Основное задание
 
-- Установил 'ansible' на локальной машине.  
+- Установил `ansible` на локальной машине.  
 - Запустил инфраструктуру `terraform` из окружения `stage`, описанную в прошлом ДЗ:
 
 ```bash
@@ -547,7 +547,7 @@ retry_files_enabled = False
 
 - Создал файлы статического инвентори: 
 
-`inventory` (в INI-формате)  
+`inventory` - в INI-формате  
 
 ```
 [app] # название группы
@@ -557,7 +557,7 @@ appserver ansible_host=178.154.230.247 # хост
 dbserver ansible_host=178.154.231.113 # хост
 ```
 
-`inventory.yml` (в YAML-формате)  
+`inventory.yml` - в YAML-формате
 
 ```
 app:
@@ -634,11 +634,68 @@ ansible app -m command -a 'git clone https://github.com/express42/reddit.git /ho
 ansible-playbook clone.yml
 ```
 
-После повторного выполнения сценария наблюдаем вывод:
+После повторного выполнения `playbook` смотрим результат:
 
 ```
 PLAY RECAP ******************************************************************************************************************************
 appserver                  : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 ```
 
-Изменеия не произошли. Это происходит, т.к. `ansible` выполняет сценарии с использованием модулей идемпотентно, т.е
+`changed=0`  
+Изменений нет, т.к. `ansible` выполняет сценарии с использованием модулей идемпотентно. Поскольку ожидаемый результат уже был достигнут на удаленном хосте, сценарий не выполнился.  
+
+Удалим каталог `~/appuser` и повторно запустим `playbook`. `ansible` проверит, что git-репозиторий отсутствует и выполнит его клонирование. Изменения отобразятся при выводе: `changed=1`
+
+```
+PLAY RECAP ******************************************************************************************************************************
+appserver                  : ok=3    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+```
+
+### Задание со *
+
+Приложен bash-скрипт  `dynamic_inv.sh` - формирует список хостов и групп для Ansible динамически, т.е. во время выполнения.  
+IP-адреса инстансов определются в соответствии с их названиями в YaCloud.
+
+```bash
+#! /bin/bash
+
+# находим публичные IP-адреса хостов по имени инстансов в YC 
+appserver=$(yc compute instance list | grep "reddit-app-0" | awk '{print $10}')
+dbserver=$(yc compute instance list | grep "reddit-db-dev1" | awk '{print $10}')
+
+if [ "$1" == "--list" ]; then
+
+cat<< EOF
+{
+  "app": {
+    "hosts": [
+      "$appserver"
+   ],
+   "vars": {
+      "example_var": "value"
+   }
+  },
+  "db": {
+    "hosts": [
+      "$dbserver" 
+   ],
+   "vars": {
+      "example_var": "value"
+   }
+  },
+  "_meta": {
+    "hostvars": {}
+    }
+}
+EOF
+elif [ "$1" == "--host" ]; then
+  echo '{"_meta": {hostvars": {}}}'
+else
+  echo "{ }"
+fi
+```
+Опции скрипта:  
+`--list` - скрипт возвращает список хостов и групп в формате JSON.
+`--host` - 
+
+
