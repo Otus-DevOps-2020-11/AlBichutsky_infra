@@ -520,3 +520,278 @@ terraform apply
 ```bash
 ssh -i ~/.ssh/appuser ubuntu@<публичный ip-адрес>
 ```
+
+## Домашнее задание №8
+
+### Основное задание
+
+- Установил `ansible` на локальной машине.  
+- Запустил инфраструктуру `terraform` из окружения `stage`, описанную в прошлом ДЗ:  
+
+```bash
+cd terraform/stage
+terraform plan
+terraform apply
+```
+
+- Создал конфигурационный файл `ansible.cfg` с необходимыми параметрами:
+
+```
+[defaults]
+; в опции inventory указываем наши файлы статического и динамического инвентори (здесь же можем указать inventory.yml)
+inventory = inventory, dynamic_inv.sh
+remote_user = ubuntu
+private_key_file = ~/.ssh/appuser
+host_key_checking = False
+retry_files_enabled = False
+```
+
+- Создал файлы статического инвентори: 
+
+`inventory` - в INI-формате  
+
+```
+[app] # название группы
+appserver ansible_host=178.154.230.247 # хост
+
+[db] # название группы
+dbserver ansible_host=178.154.231.113 # хост
+```
+
+`inventory.yml` - в YAML-формате
+
+```
+app:
+  hosts:
+    appserver:
+      ansible_host: 178.154.230.247
+
+db:
+  hosts:
+    dbserver:
+      ansible_host: 178.154.231.113
+```
+
+- Проверил доступность удаленных хостов и групп коммандой `ping`:
+
+```bash
+# указанных в файле inventory
+ansible appserver -i ./inventory -m ping
+ansible dbserver -i ./inventory -m ping
+ansible app -i ./inventory -m ping
+ansible db -i ./inventory -m ping
+
+# указанных в файле inventory.yml
+ansible appserver -i ./inventory.yml -m ping
+ansible dbserver -i ./inventory.yml -m ping
+ansible app -i ./inventory.yml -m ping
+ansible db -i ./inventory.yml -m ping
+
+# без указания файлов инвентори - в ansible.cfg инвентори задан и параметры подключения переопределены
+ansible all -m ping
+ansible appserver -m ping
+ansible dbserver -m ping
+ansible app -m ping
+ansible db -m ping
+```
+
+- Выполнил команды на удаленных хостах:
+
+```bash
+ansible dbserver -m command -a uptime
+# проверка версий приложений
+ansible app -m command -a 'ruby -v'
+ansible app -m shell -a 'ruby -v; bundler -v'
+# проверка статуса сервиса 
+ansible db -m command -a 'systemctl status mongod'
+ansible db -m systemd -a name=mongod # используется модуль systemd
+ansible db -m service -a name=mongod # используется модуль service - более универсален и работает на более старых ОС
+# клонирование git-репозиторий (должен быть установлен git)
+ansible app -become=yes -m apt -a "name=git state=present"
+ansible app -become=yes -m git -a 'repo=https://github.com/express42/reddit.git dest=/home/appuser/reddit'
+ansible app -m command -a 'git clone https://github.com/express42/reddit.git /home/appuser/reddit' # должна появиться ошибка при выполнении
+```
+
+- Создал и выполнил playbook:
+
+```yml
+---
+- name: Clone
+  hosts: app
+  become: yes
+  tasks:
+    - name: Install git
+      apt: 
+        name: git
+        state: present
+    - name: Clone repo
+      git:
+        repo: https://github.com/express42/reddit.git
+        dest: /home/appuser/reddit
+```
+
+Команда для запуска сценария `playbook`:
+
+```bash
+ansible-playbook clone.yml
+```
+
+После повторного выполнения `playbook` проверяем результат:
+
+```
+PLAY RECAP ******************************************************************************************************************************
+appserver                  : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+```
+
+`changed=0`  
+Изменений нет, т.к `ansible` поддерживает идемпотентность при выполнении сценариев с использованием модулей. 
+Поскольку ожидаемый результат уже был достигнут на удаленном хосте (репозиторий склонирован), сценарий повторно не выполнился.  
+
+Удалим каталог `~/appuser` и повторно запустим `playbook`. `Ansible` проверит, что репозиторий отсутствует и выполнит его клонирование.  
+теперь изменения будут отображены при выводе: `changed=1`
+
+```
+PLAY RECAP ******************************************************************************************************************************
+appserver                  : ok=3    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+```
+
+### Задание со *
+
+Приложен bash-скрипт `dynamic_inv.sh` - во время выполнения формирует динамически список хостов для Ansible (динамический инвентори). IP-адреса определяются в соответствии с названиями инстансов в YaCloud, созданными ранее через `terraform`: reddit-app-0, reddit-db-dev1.
+
+```bash
+#! /bin/bash
+
+# находим публичные IP-адреса хостов по имени инстансов в YC 
+appserver=$(yc compute instance list | grep "reddit-app-0" | awk '{print $10}')
+dbserver=$(yc compute instance list | grep "reddit-db-dev1" | awk '{print $10}')
+
+if [ "$1" == "--list" ]; then
+
+cat<< EOF
+{
+  "app": {
+    "hosts": [
+      "$appserver"
+   ],
+   "vars": {
+      "example_var": "value"
+   }
+  },
+  "db": {
+    "hosts": [
+      "$dbserver" 
+   ],
+   "vars": {
+      "example_var": "value"
+   }
+  },
+  "_meta": {
+    "hostvars": {}
+    }
+}
+EOF
+elif [ "$1" == "--host" ]; then
+  echo '{"_meta": {hostvars": {}}}'
+else
+  echo "{ }"
+fi
+```
+
+**Опции скрипта** 
+
+`--list` - Возвращает список групп, хостов, а также переменных в формате JSON.
+
+`--host` - Поддержка этой опции необязательна и не используется (указана пустая секция `_meta`). Cкрипт возвращает элемент верхнего уровня с именем `_meta`, в котором могут быть перечислены все переменные для хостов.
+
+Пример использования скрипта:
+
+```bash
+[root@localhost ansible]# ./dynamic_inv.sh --list
+{
+  "app": {
+    "hosts": [
+      "178.154.230.247"
+   ],
+   "vars": {
+      "example_var": "value"
+   }
+  },
+  "db": {
+    "hosts": [
+      "178.154.231.113"
+   ],
+   "vars": {
+      "example_var": "value"
+   }
+  },
+  "_meta": {
+    "hostvars": {}
+    }
+}
+```
+Файл динамического инвентори `inventory.json` приложил к ДЗ (формально он не используется, используется скрипт).  
+Его создание выполнил командой: 
+
+```bash
+./dynamic_inv.sh --list > inventory.json
+```
+
+При запуске Ansible скрипт динамического инвентори вызывается с помощью ключей `-i` или `--inventory`
+
+```bash
+[root@localhost ansible]# ansible db -m ping -i ./dynamic_inv.sh
+178.154.231.113 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+```
+
+Скрипт добавил в `ansible.cfg`, чтобы постоянно не ссылаться на него при запуске Ansible.
+
+```INI
+[defaults]
+inventory = inventory, dynamic_inv.sh
+```
+
+После этого проверил доступность всех хостов, указанных в статическом и динамическом инвентори командой `ansible all -m ping`
+
+```bash
+[root@localhost ansible]# ansible all -m ping
+178.154.230.247 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+appserver | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+dbserver | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+178.154.231.113 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+```
+
+**Отличия схем JSON для динамического и статического инвентори**
+
+Пример статического инвентори в JSON приведен здесь: https://linuxhint.com/ansible_inventory_json_format/
+Имеются отличия в синтаксисе файлов, например в JSON динамического инвентори хосты перечисляются в квадратных скобках. 
+Кроме того, в динамическом инвентори используется секция `_meta`, которой нет в статическом инвентори.
