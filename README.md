@@ -1054,7 +1054,7 @@ ansible-playbook reddit_app.yml --tags deploy-tag
 ```
 
 Проверка деплоя приложения:  
-http://<публичный IP IP appserver>:9292
+http://<публичный IP appserver>:9292
 
 - Затем пересоздал инфраструктуру `terraform`:
   
@@ -1162,4 +1162,4 @@ ansible-playbook site.yml
 ```
 
 Проверка деплоя приложения:  
-http://<публичный IP IP appserver>:9292
+http://<публичный IP appserver>:9292
