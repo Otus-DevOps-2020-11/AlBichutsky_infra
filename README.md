@@ -795,3 +795,257 @@ dbserver | SUCCESS => {
 Пример статического инвентори в JSON приведен здесь: https://linuxhint.com/ansible_inventory_json_format/
 Имеются отличия в синтаксисе файлов, например в JSON динамического инвентори хосты перечисляются в квадратных скобках. 
 Кроме того, в динамическом инвентори используется секция `_meta`, которой нет в статическом инвентори.
+
+## Домашнее задание №9
+
+### Основное задание
+  
+- Запустил инфраструктуру `terraform` из окружения `stage`, описанную в ДЗ №6:  
+
+```bash
+cd terraform/stage
+terraform plan
+terraform apply
+```
+
+- Создал playbook `reddit_app.yml` с одним сценарием для развертывания тестового приложения `reddit` .  
+  db_host - внутренний IP-адрес сервера mongodb.
+
+```yml
+--- 
+- name: Configure hosts & deploy application
+  hosts: all
+  vars:
+    mongo_bind_ip: 0.0.0.0  # <-- Переменная задается в блоке vars
+    db_host: 10.130.0.34
+  tasks:
+    - name: Change mongo config file
+      become: true  # <-- Выполнить задание от root
+      template:
+        src: templates/mongod.conf.j2 # <-- Путь до локального файла-шаблона
+        dest: /etc/mongod.conf  # <-- Путь на удаленном хосте
+        mode: 0644  # <-- Права на файл, которые нужно установить
+      tags: db-tag  # <-- Список тэгов для задачи
+      notify: restart mongod
+
+    - name: Install git
+      become: true
+      apt: 
+        name: git
+        state: present
+      tags: deploy-tag
+
+    - name: Fetch the latest version of application code
+      become: true
+      git: 
+        repo: 'https://github.com/express42/reddit.git'
+        dest: /home/appuser/reddit
+        version: monolith # <-- Указываем нужную ветку
+      tags: deploy-tag
+      notify: reload puma
+
+    - name: Bundle install
+      bundler: 
+        state: present
+        chdir: /home/appuser/reddit # <-- В какой директории выполнить команду bundle
+      tags: deploy-tag
+
+    - name: Add unit file for Puma
+      become: true
+      copy: 
+        src: files/puma.service
+        dest: /etc/systemd/system/puma.service
+      tags: app-tag
+      notify: reload puma
+
+    - name: Add config for DB connection
+      become: true
+      template: 
+        src: templates/db_config.j2
+        dest: /home/appuser/db_config
+      tags: app-tag  
+
+    - name: enable puma
+      become: true
+      systemd: name=puma enabled=yes
+      tags: app-tag
+
+  handlers: # <-- Добавим блок handlers и задачу
+    - name: restart mongod
+      become: true
+      service: name=mongod state=restarted
+
+    - name: reload puma
+      become: true
+      systemd: name=puma state=restarted
+```
+
+- Создал шаблоны конфигов в каталоге `templates`: 
+
+`db_config.j2`  
+В конфиг подставляется внутренний IP-адрес сервера `mongodb`, чтобы `reddit` мог подключиться к БД. Копируется на инстанс appserver.
+
+```
+DATABASE_URL={{ db_host }}
+```
+
+`mongod.conf.j2`  
+Конфиг `mongodb`, копируется на инстанс dbserver.
+
+```
+# Where and how to store data.
+storage:
+  dbPath: /var/lib/mongodb
+  journal:
+    enabled: true
+
+# where to write logging data.
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod.log
+
+# network interfaces
+net:
+  # default - один из фильтров Jinja2, он задает значение по умолчанию, 
+  # если переменная слева не определена
+  port: {{ mongo_port | default('27017') }}
+  bindIp: {{ mongo_bind_ip }} # <-- Подстановка значения переменной
+```
+
+- Создал в каталоге `files` файл юнита `puma.service`.  
+  Копируется на инстанс dbserver.
+
+```INI
+[Unit]
+Description=Puma HTTP Server
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/home/appuser/db_config
+User=ubuntu
+WorkingDirectory=/home/appuser/reddit
+ExecStart=/bin/bash -lc 'puma'
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+- Проверил и выполнил сценарии playbook коммандами:
+
+```bash
+# проверка
+ansible-playbook reddit_app.yml --check --limit db --tags db-tag
+ansible-playbook reddit_app.yml --check --limit app --tags deploy-tag
+ansible-playbook reddit_app.yml --check --limit app --tags app-tag
+# выполнение
+ansible-playbook reddit_app.yml --limit db --tags db-tag
+ansible-playbook reddit_app.yml --limit app --tags deploy-tag
+ansible-playbook reddit_app.yml --limit app --tags app-tag
+```
+
+Следует учитывать, что при первом выполнении хэндлера в `deploy-tag` возникнет ошибка при перезапуске сервиса puma, поскольку файл юнита пока не скопирован на инстанс (будет скопирован и перезапущен в `app-tag`).
+
+Проверка деплоя приложения: http://<публичный IP сервера приложений>:9292
+
+- Затем пересоздал инфраструктуру `terraform`:
+  
+  ```
+  terraform destroy
+  terraform apply
+  ```
+
+- На основе `reddit_app.yml` создал playbook `reddit_app2.yml` с разбивкой на несколько сценариев. Названия тэгов и секция `become: true` указаны для каждого сценария.
+
+```yaml
+--- 
+- name: Configure MongoDB
+  hosts: db
+  tags: db-tag
+  become: true
+  vars:
+    mongo_bind_ip: 0.0.0.0
+  tasks:
+    - name: Change mongo config file
+      template:
+        src: templates/mongod.conf.j2
+        dest: /etc/mongod.conf
+        mode: 0644
+      notify: restart mongod
+
+  handlers:
+    - name: restart mongod
+      service: name=mongod state=restarted
+
+- name: Deploy App
+  hosts: app
+  tags: deploy-tag
+  become: true
+  tasks:  
+    - name: Install git
+      apt: 
+        name: git
+        state: present
+
+    - name: Fetch the latest version of application code
+      git: 
+        repo: 'https://github.com/express42/reddit.git'
+        dest: /home/appuser/reddit
+        version: monolith
+      notify: reload puma
+
+    - name: Bundle install
+      bundler: 
+        state: present
+        chdir: /home/appuser/reddit
+
+  handlers:
+    - name: reload puma
+      systemd: name=puma state=restarted
+
+- name: Configure App
+  hosts: app
+  tags: app-tag
+  become: true
+  vars:
+    db_host: 10.130.0.6
+  tasks:
+    - name: Add unit file for Puma
+      copy: 
+        src: files/puma.service
+        dest: /etc/systemd/system/puma.service
+      notify: reload puma
+
+    - name: Add config for DB connection
+      template: 
+        src: templates/db_config.j2
+        dest: /home/appuser/db_config
+        owner: ubuntu
+        group: ubuntu
+
+    - name: enable puma
+      systemd: name=puma enabled=yes
+
+  handlers:
+    - name: reload puma
+      systemd: name=puma state=restarted
+  ```
+
+- Проверил и выполнил сценарии playbook коммандами:
+
+```bash
+# проверка (группы хостов не указываем)
+ansible-playbook reddit_app.yml --check --tags db-tag
+ansible-playbook reddit_app.yml --check --tags deploy-tag
+ansible-playbook reddit_app.yml --check --tags app-tag
+# выполнение (группы хостов не указываем)
+ansible-playbook reddit_app.yml --tags db-tag
+ansible-playbook reddit_app.yml --tags deploy-tag
+ansible-playbook reddit_app.yml --tags app-tag
+```
+
+Следует учитывать, что при первом выполнении хэндлера в `deploy-tag` возникнет ошибка при перезапуске сервиса puma, поскольку файл юнита пока не скопирован на инстанс (будет скопирован и перезапущен в `app-tag`).
+
+Проверка деплоя приложения: http://<публичный IP сервера приложений>:9292
