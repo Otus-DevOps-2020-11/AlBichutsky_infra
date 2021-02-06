@@ -798,9 +798,10 @@ dbserver | SUCCESS => {
 
 ## Домашнее задание №9
 
-В задании выполняется деплой тестового приложения `reddit` с помощью `ansible-playbook` на инстансах, разворачиваемых через `terraform` в YaCloud.  
-На инстансе `appserver` приложение устанавливается из git-репозитория 
-в каталог пользователя `ubuntu`: `/home/ubuntu/reddit` (в ДЗ №6 и №7 был создан этот пользователь).
+В задании выполняется деплой тестового приложения `reddit` с помощью `ansible-playbook` на инстансах, созданных через `terraform` в YaCloud.  
+Вместо пользователя `appuser` указан `ubuntu` (т.к. в заданиях №6 и 7 публичный ключ пробрасывался для `ubuntu`, он и присутствует в системе).
+На инстансе `appserver` репозиторий приложения клонируется в каталог пользователя `ubuntu`: `/home/ubuntu`.
+
 
 ### Основное задание
   
@@ -965,7 +966,7 @@ terraform apply -auto-approve=false
 
 - На основе `reddit_app_one_play.yml` создал playbook `reddit_app_multiple_plays.yml` с разбивкой на несколько сценариев. Названия тэгов и секция `become: true` указаны здесь для каждого сценария.
 
-```yaml
+```yml
 --- 
 - name: Configure MongoDB
   hosts: db
@@ -1064,7 +1065,7 @@ terraform apply -auto-approve=false
 
 - Далее вынес сценарии из `reddit_app_multiple_plays.yml` в отдельные плейбуки, из которых удалена секция `tags`:
 
-`db.yaml`
+`db.yml`
 
 ```yaml
 - name: Configure MongoDB
