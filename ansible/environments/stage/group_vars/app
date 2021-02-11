@@ -1,5 +1,5 @@
 # mongodb server
-db_host: 10.130.0.6
+db_host: 10.130.0.10
 
 # nginx
 nginx_sites:  
