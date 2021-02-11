@@ -1242,10 +1242,11 @@ ansible/playbooks/db.yml
 - Зашифровал ключом `ansible-vault` файлы `credentials.yml`, в которых содержатся пароли пользователей: 
 
 ```bash
-# зашифровать
-echo "somepass" > vault.key # создать ключ для шифрования
-ansible-vault encrypt environments/stage/credentials.yml
-ansible-vault encrypt environments/prod/credentials.yml
+# создать файл ключа с паролем для шифрования
+echo "somepass" > vault.key
+# шифруем ключом файлы
+ansible-vault encrypt environments/stage/credentials.yml # для stage-окружения
+ansible-vault encrypt environments/prod/credentials.yml  # для prod-окружения
 # расшифровать
 ansible-vault encrypt environments/stage/credentials.yml
 ansible-vault encrypt environments/prod/credentials.yml
