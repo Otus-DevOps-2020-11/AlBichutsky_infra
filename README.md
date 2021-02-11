@@ -1285,7 +1285,7 @@ context = 5
 - import_playbook: users.yml
 ```
 
-- Старые папки и файлы перенесены в каталог ansible/old
+- Старые файлы перенесены в каталог ansible/old, плейбуки в ansible/playbooks
 
 - Структура каталогов ansible в итоге выглядит следующим образом:
 
