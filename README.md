@@ -1460,3 +1460,270 @@ ssh -i ~/.ssh/appuser ubuntu@<публичный IP>
 su - admin
 # вводим пароль из зашифрованного конфига окружения environments/prod/credentials.yml
 ``` 
+
+## Домашнее задание №11
+
+### Основное задание
+
+- Доработал ansible-роли `app`, `db` для провижинга ВМ в `Vagrant`.
+
+- Описал локальную инфраструктуру в `Vagrantfile`.  
+  Роли вызываются через главный плейбук `site.yml`.
+
+```ruby
+Vagrant.configure("2") do |config|
+
+  config.vm.provider :virtualbox do |v|
+    v.memory = 512
+  end
+
+  config.vm.define "dbserver" do |db|
+    db.vm.box = "ubuntu/xenial64"
+    db.vm.hostname = "dbserver"
+    db.vm.network :private_network, ip: "10.10.10.10"
+
+    db.vm.provision "ansible" do |ansible|
+      ansible.playbook = "playbooks/site.yml"
+      ansible.groups = {
+      "db" => ["dbserver"],
+      "db:vars" => {"mongo_bind_ip" => "0.0.0.0"}
+      }
+    end
+  end
+  
+  config.vm.define "appserver" do |app|
+    app.vm.box = "ubuntu/xenial64"
+    app.vm.hostname = "appserver"
+    app.vm.network :private_network, ip: "10.10.10.20"
+
+    app.vm.provision "ansible" do |ansible|
+      ansible.playbook = "playbooks/site.yml"
+      ansible.groups = {
+      "app" => ["appserver"],
+      "app:vars" => { "db_host" => "10.10.10.10"}
+      }
+      ansible.extra_vars = {
+      "deploy_user" => "ubuntu"
+      }
+    end
+  end
+
+end
+```
+
+- Проверил запуск ролей в Vagrant:
+
+```bash
+# Удалить окружение
+vagrant destroy -f
+# Создать окружение
+vagrant up { dbserver | appserver }
+# Проверить ВМ
+vagrant status
+# Проверить наличия боксов Vagrant
+vagrant box list
+# Выполнить провижинг
+vagrant provision { dbserver | appserver }
+```
+
+Приложение должно быть доступным по адресу: http://10.10.10.20:9292  
+
+- Установил через `pip` необходимые компоненты для тестирования ansible-ролей с помощью Vagrant: `Molecule`, `Ansible`, `Testinfra` (версии для python 3.6).   
+
+Зависимости указаны в файле `requirements.txt`.
+
+```
+ansible>=2.4
+molecule>=2.6
+# testinfra>=1.10 # вместо него используем более новый pytest-testinfra
+pytest-testinfra>=6.1.0 # запуск доп.тестов в molecule
+python-vagrant>=0.5.15
+molecule-vagrant>=0.6.1 # драйвер vagrant для molecule
+```
+
+Подробнее: https://molecule.readthedocs.io/en/latest/installation.html
+
+Команды pip:
+
+```bash
+# Установка пакетов
+python3.6 -m pip install -r requirements.txt 
+# Удаление пакетов
+python3.6 -m pip uninstall -r requirements.txt
+# проверить зависимости
+python3.6 -m pip check
+# проверить установленные версии
+ansible --version
+molecule --version
+```
+
+Установку данных модулей рекомендуется выполнять в созданной через `virtualenv` среде работы с python. Иначе могут возникнуть проблемы с зависимостями, которые ранее были установлены в разных каталогах, указанных в переменной $PATH (от pip, pip2, pip2.7, pip3.6 и т.д).
+
+- Выполнил инциализацию заготовки тестов `molecule` для роли `db` и провел тестирование.
+
+```bash
+# Переходим в каталог с ролью ansible
+cd ansible/roles/db
+
+# Инициализируем сценарий для уже готовой роли db (используем драйвер Vagrant)
+molecule init scenario default --role-name db --driver-name vagrant
+
+# Создаем ВМ для проверки роли
+molecule create
+
+# Проверяем название созданной ВМ для тестирования
+molecule list
+
+INFO     Running default > list
+                ╷             ╷                  ╷               ╷         ╷            
+  Instance Name │ Driver Name │ Provisioner Name │ Scenario Name │ Created │ Converged  
+╶───────────────┼─────────────┼──────────────────┼───────────────┼─────────┼───────────╴
+  instance      │ vagrant     │ ansible          │ default       │ true    │ false     
+
+# Применяем роль ansible на ВМ (вызывается плейбук converge.yml c ролью)
+molecule converge
+
+# Подключаемся к ВМ с именем instance для отладки (после применения плейбука можно посмотреть изменения)
+molecule login -h instance
+
+# Запускаем отдельные тесты Testinfra (указаны в test_default.py):
+molecule verify
+
+INFO     default scenario test matrix: verify
+INFO     Running default > verify
+INFO     Executing Testinfra tests found in /home/devops-course/11-ansible4/AlBichutsky_infra/ansible/roles/db/molecule/default/tests/...
+============================= test session starts ==============================
+platform linux -- Python 3.6.8, pytest-6.2.2, py-1.10.0, pluggy-0.13.1
+rootdir: /
+plugins: testinfra-6.1.0
+collected 3 items
+
+molecule/default/tests/test_default.py ...                               [100%]
+
+============================== 3 passed in 3.46s ===============================
+INFO     Verifier completed successfully.
+
+# Выполняем полный цикл тестирования
+molecule test
+
+# Выходим из ВМ и удаляем ее (рекомендуется запускать на локальной машине перед новым тестированием)
+molecule destroy
+```
+
+- Добавил отдельную проверку, что mongoDB слушает порт 27017 (в файле test_default.py).  
+
+```python
+...
+# check is MongoDB listening port 27017
+def test_listening_port(host):
+    mongo_socket = host.socket("tcp://0.0.0.0:27017")
+    assert mongo_socket.is_listening
+...
+```
+
+- В каталоге `../ansible/playbooks` создал плейбуки, которые вызывают наши роли:
+
+packer_db.yml
+
+```yml
+- name: Configure MongoDB
+  hosts: all
+  become: true
+  roles: 
+    - db
+```
+
+packer_app.yml
+
+```yml
+- name: Configure App
+  hosts: all
+  become: true
+  roles:
+    - app    
+```
+
+Затем в шаблонах Packer настроил ansible-провижинг и указал данные плейбуки (вместо shell-провижинга). 
+При этом при создании образа будут запускаться только таски каждой роли с определенными тэгами:
+
+db.json
+
+```json
+{
+    "variables": {
+           "zone": "ru-central1-a",
+           "instance_cores": "2"
+       },
+    "builders": [
+       {
+           "type": "yandex",
+           "service_account_key_file": "{{user `service_account_key_file`}}",
+           "folder_id": "{{user `folder_id`}}",
+           "source_image_family": "{{user `source_image_family`}}",
+           "image_name": "reddit-db-base-{{timestamp}}",
+           "image_family": "reddit-base",
+           "ssh_username": "ubuntu",
+           "platform_id": "standard-v1",
+           "zone": "{{user `zone`}}",
+           "instance_cores": "{{user `instance_cores`}}",
+       "use_ipv4_nat" : "true"
+       }
+   ],
+   "provisioners": [
+       {
+           "type": "ansible",
+           "user": "ubuntu",
+           "playbook_file": "../ansible/playbooks/packer_db.yml",
+           "extra_arguments": ["--tags","install"],
+           "ansible_env_vars": ["ANSIBLE_ROLES_PATH=../ansible/roles"]
+       }
+   ]
+}
+```
+
+app.json
+
+```json
+{
+    "variables": {
+           "zone": "ru-central1-a",
+           "instance_cores": "2"
+       },
+    "builders": [
+       {
+           "type": "yandex",
+           "service_account_key_file": "{{user `service_account_key_file`}}",
+           "folder_id": "{{user `folder_id`}}",
+           "source_image_family": "{{user `source_image_family`}}",
+           "image_name": "reddit-app-base-{{timestamp}}",
+           "image_family": "reddit-base",
+           "ssh_username": "ubuntu",
+           "platform_id": "standard-v1",
+           "zone": "{{user `zone`}}",
+           "instance_cores": "{{user `instance_cores`}}",
+       "use_ipv4_nat" : "true"
+       }
+   ],
+   "provisioners": [
+       {
+           "type": "ansible",
+           "user": "ubuntu",
+           "playbook_file": "../ansible/playbooks/packer_app.yml",
+           "extra_arguments": ["--tags","ruby"],
+           "ansible_env_vars": ["ANSIBLE_ROLES_PATH=../ansible/roles"]
+       }
+   ]
+}
+```
+
+Билд стал проходить успешно только после того, как указал строчку `"user": "ubuntu"` в секцию `provisioners`.
+
+Проверка запекания образа:
+
+```bash
+# Переходим в каталог Packer
+cd packer
+# Запускаем сборку образов
+packer build -var-file=variables.json db.json
+packer build -var-file=variables.json app.json
+```
