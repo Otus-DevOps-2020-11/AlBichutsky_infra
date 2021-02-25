@@ -1673,7 +1673,7 @@ db.json
        {
            "type": "ansible",
            "user": "ubuntu",
-           "playbook_file": "ansible/playbooks/packer_db.yml",
+           "playbook_file": "{{ pwd }}/ansible/playbooks/packer_db.yml",
            "extra_arguments": ["--tags","install"],
            "ansible_env_vars": ["ANSIBLE_ROLES_PATH={{ pwd }}/ansible/roles"]
        }
@@ -1708,7 +1708,7 @@ app.json
        {
            "type": "ansible",
            "user": "ubuntu",
-           "playbook_file": "ansible/playbooks/packer_app.yml",
+           "playbook_file": "{{ pwd }}/ansible/playbooks/packer_app.yml",
            "extra_arguments": ["--tags","ruby"],
            "ansible_env_vars": ["ANSIBLE_ROLES_PATH={{ pwd }}/ansible/roles"]
        }
