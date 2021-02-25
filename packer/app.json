@@ -22,7 +22,7 @@
        {
            "type": "ansible",
            "user": "ubuntu",
-           "playbook_file": "../ansible/playbooks/packer_app.yml",
+           "playbook_file": "ansible/playbooks/packer_app.yml",
            "extra_arguments": ["--tags","ruby"],
            "ansible_env_vars": ["ANSIBLE_ROLES_PATH=../ansible/roles"]
        }
