@@ -1673,9 +1673,9 @@ db.json
        {
            "type": "ansible",
            "user": "ubuntu",
-           "playbook_file": "../ansible/playbooks/packer_db.yml",
+           "playbook_file": "ansible/playbooks/packer_db.yml",
            "extra_arguments": ["--tags","install"],
-           "ansible_env_vars": ["ANSIBLE_ROLES_PATH=../ansible/roles"]
+           "ansible_env_vars": ["ANSIBLE_ROLES_PATH={{ pwd }}/ansible/roles"]
        }
    ]
 }
@@ -1708,9 +1708,9 @@ app.json
        {
            "type": "ansible",
            "user": "ubuntu",
-           "playbook_file": "../ansible/playbooks/packer_app.yml",
+           "playbook_file": "ansible/playbooks/packer_app.yml",
            "extra_arguments": ["--tags","ruby"],
-           "ansible_env_vars": ["ANSIBLE_ROLES_PATH=../ansible/roles"]
+           "ansible_env_vars": ["ANSIBLE_ROLES_PATH={{ pwd }}/ansible/roles"]
        }
    ]
 }
@@ -1721,9 +1721,31 @@ app.json
 Проверка запекания образа:
 
 ```bash
-# Переходим в каталог Packer
-cd packer
-# Запускаем сборку образов
-packer build -var-file=variables.json db.json
-packer build -var-file=variables.json app.json
+# Запускаем сборку образов из корневой папки проекта (не из packer).
+# Это сделано, чтобы тесты github прошли успешно. 
+# В шаблонах db.json, app.json путь к плейбуку и роли задается через переменную {{ pwd }}, т.е применительно к каталогу запуска команды packer
+packer validate -var-file=packer/variables.json packer/db.json
+packer validate -var-file=packer/variables.json packer/db.json
+packer build -var-file=packer/variables.json packer/db.json
+packer build -var-file=packer/variables.json packer/app.json
+```
+
+- Выполнил проверку плейбуков и ролей с помощью `ansible-lint`, затем исправил их. Из-за несоответствий формата и синтаксиса yml не проходили тесты на github.  
+
+Описание проверяемых параметров: https://ansible-lint.readthedocs.io/en/latest/default_rules.html#meta-no-info  
+
+Основные проблемы:  
+`yaml: no new line character at the end of file (new-line-at-end-of-file)` - отутствует CRLF в конце строки  
+`yaml: trailing spaces (trailing-spaces)` - наличие лишних пробелов  
+`yaml: comment not indented like content (comments-indentation)` - съехали строчки с комментариями 
+
+```bash
+# Установка ansible-lint (можно добавить в requirements.txt)
+python3.6 -m pip install ansible-lint
+which ansible-lint
+# проверка ролей (исключаем роли, которые не проверяем)
+cd ansible
+ansible-lint playbooks/site.yml --exclude=roles/jdauphant.nginx --exclude=.imported_roles/jdauphant.nginx --exclude=.imported_roles/db
+# также можем использовать
+ansible-playbook playbooks/site.yml -v.
 ```
