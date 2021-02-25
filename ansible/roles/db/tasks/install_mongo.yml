@@ -14,12 +14,12 @@
   apt:
     name: mongodb-org
     state: present
-    allow_unauthenticated: yes
+    allow_unauthenticated: true
   tags: install
 
 - name: Configure service supervisor
   systemd:
     name: mongod
-    enabled: yes
+    enabled: true
     state: started
   tags: install
