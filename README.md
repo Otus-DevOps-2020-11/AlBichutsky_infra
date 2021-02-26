@@ -1735,7 +1735,7 @@ packer build -var-file=packer/variables.json packer/app.json
 Описание проверяемых параметров: https://ansible-lint.readthedocs.io/en/latest/default_rules.html#meta-no-info  
 
 Основные проблемы:  
-`yaml: no new line character at the end of file (new-line-at-end-of-file)` - отутствует CRLF в конце строки  
+`yaml: no new line character at the end of file (new-line-at-end-of-file)` - В новой строчке в конце файла нет символа перевода строки (LF) - для Unix. Для windows - символ CRLF (с переводом в начало строки). Добавляем с помощью VSCode.
 `yaml: trailing spaces (trailing-spaces)` - наличие лишних пробелов  
 `yaml: comment not indented like content (comments-indentation)` - съехали строчки с комментариями 
 
@@ -1746,6 +1746,6 @@ which ansible-lint
 # проверка ролей (исключаем роли, которые не проверяем)
 cd ansible
 ansible-lint playbooks/site.yml --exclude=roles/jdauphant.nginx --exclude=.imported_roles/jdauphant.nginx --exclude=.imported_roles/db
-# также можем использовать
-ansible-playbook playbooks/site.yml -v.
+# также можем использовать для проверки
+ansible-playbook playbooks/site.yml --syntax-check.
 ```
